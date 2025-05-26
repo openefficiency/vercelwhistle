@@ -6,9 +6,23 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
-import { Phone, PhoneOff, Shield, ArrowLeft, AlertCircle, Save, Edit3, Loader2, Volume2, VolumeX } from "lucide-react"
+import {
+  Phone,
+  PhoneOff,
+  Shield,
+  ArrowLeft,
+  AlertCircle,
+  Save,
+  Edit3,
+  Loader2,
+  Volume2,
+  VolumeX,
+  Settings,
+} from "lucide-react"
 import Link from "next/link"
 import { Alert, AlertDescription } from "@/components/ui/alert"
+import { VapiDebug } from "@/components/vapi-debug"
+import { VapiSimple } from "@/components/vapi-simple"
 
 // VAPI Configuration
 const VAPI_PUBLIC_KEY = "4669de51-f9ba-4e99-a9dd-e39279a6f510"
@@ -32,47 +46,114 @@ export default function VoiceReportPage() {
   const [volumeLevel, setVolumeLevel] = useState(0)
   const [conversationStarted, setConversationStarted] = useState(false)
   const [isEditingTranscript, setIsEditingTranscript] = useState(false)
+  const [showDebug, setShowDebug] = useState(false)
 
   const transcriptRef = useRef<HTMLDivElement>(null)
+
+  const retrySDKLoad = () => {
+    setVapiLoaded(false)
+    setErrorMessage("")
+    setCallStatus("idle")
+
+    // Remove any existing VAPI scripts
+    const existingScripts = document.querySelectorAll('script[src*="vapi"]')
+    existingScripts.forEach((script) => script.remove())
+
+    // Clear window.Vapi if it exists
+    if (window.Vapi) {
+      delete window.Vapi
+    }
+
+    // Trigger reload
+    window.location.reload()
+  }
+
+  const loadSDKManually = async () => {
+    try {
+      setErrorMessage("")
+      console.log("🔄 Attempting manual VAPI SDK load...")
+
+      // Try to load via dynamic import as fallback
+      const vapiModule = await import("https://cdn.jsdelivr.net/npm/@vapi-ai/web@latest/dist/index.js")
+
+      if (vapiModule && vapiModule.default) {
+        window.Vapi = vapiModule.default
+        setVapiLoaded(true)
+        console.log("✅ VAPI SDK loaded manually")
+      } else {
+        throw new Error("VAPI module not found in import")
+      }
+    } catch (error) {
+      console.error("❌ Manual VAPI SDK load failed:", error)
+      setErrorMessage("Manual SDK loading failed. Please try refreshing the page or use the text form instead.")
+    }
+  }
 
   // Load VAPI SDK
   useEffect(() => {
     const loadVapiSDK = () => {
       // Check if VAPI is already loaded
       if (window.Vapi) {
-        console.log("VAPI already loaded")
+        console.log("✅ VAPI already loaded")
         setVapiLoaded(true)
         return
       }
 
-      console.log("Loading VAPI SDK...")
-      const script = document.createElement("script")
-      script.src = "https://cdn.jsdelivr.net/npm/@vapi-ai/web@latest/dist/index.js"
-      script.async = true
+      console.log("🔄 Loading VAPI SDK...")
 
-      script.onload = () => {
-        console.log("VAPI SDK loaded successfully")
-        setVapiLoaded(true)
-      }
+      // Try multiple CDN sources for better reliability
+      const sdkSources = [
+        "https://cdn.jsdelivr.net/npm/@vapi-ai/web@latest/dist/index.js",
+        "https://unpkg.com/@vapi-ai/web@latest/dist/index.js",
+        "https://cdn.skypack.dev/@vapi-ai/web@latest",
+      ]
 
-      script.onerror = (error) => {
-        console.error("Failed to load VAPI SDK:", error)
-        setErrorMessage("Failed to load VAPI SDK. Please refresh the page and try again.")
-        setCallStatus("error")
-      }
+      const currentSourceIndex = 0
 
-      document.head.appendChild(script)
-
-      // Cleanup function
-      return () => {
-        if (script.parentNode) {
-          script.parentNode.removeChild(script)
+      const tryLoadSource = (sourceIndex: number) => {
+        if (sourceIndex >= sdkSources.length) {
+          console.error("❌ All VAPI SDK sources failed")
+          setErrorMessage(
+            "Failed to load VAPI SDK from all sources. Please check your internet connection and try again.",
+          )
+          setCallStatus("error")
+          return
         }
+
+        const script = document.createElement("script")
+        script.src = sdkSources[sourceIndex]
+        script.async = true
+        script.crossOrigin = "anonymous"
+
+        console.log(`🔄 Trying VAPI SDK source ${sourceIndex + 1}:`, script.src)
+
+        script.onload = () => {
+          console.log("✅ VAPI SDK loaded successfully from:", script.src)
+
+          // Give it a moment to initialize
+          setTimeout(() => {
+            if (window.Vapi) {
+              setVapiLoaded(true)
+            } else {
+              console.warn("⚠️ VAPI SDK loaded but window.Vapi not available, trying next source...")
+              tryLoadSource(sourceIndex + 1)
+            }
+          }, 500)
+        }
+
+        script.onerror = (error) => {
+          console.error(`❌ Failed to load VAPI SDK from source ${sourceIndex + 1}:`, error)
+          document.head.removeChild(script)
+          tryLoadSource(sourceIndex + 1)
+        }
+
+        document.head.appendChild(script)
       }
+
+      tryLoadSource(0)
     }
 
-    const cleanup = loadVapiSDK()
-    return cleanup
+    loadVapiSDK()
   }, [])
 
   // Initialize VAPI client when SDK is loaded
@@ -253,9 +334,15 @@ export default function VoiceReportPage() {
             <ArrowLeft className="h-5 w-5" />
             <span>Back to Home</span>
           </Link>
-          <div className="flex items-center space-x-2">
-            <Shield className="h-8 w-8 text-blue-600" />
-            <span className="text-2xl font-bold text-gray-900">Aegis Voice Assistant</span>
+          <div className="flex items-center space-x-4">
+            <Button variant="ghost" size="sm" onClick={() => setShowDebug(!showDebug)}>
+              <Settings className="h-4 w-4 mr-2" />
+              Debug
+            </Button>
+            <div className="flex items-center space-x-2">
+              <Shield className="h-8 w-8 text-blue-600" />
+              <span className="text-2xl font-bold text-gray-900">Aegis Voice Assistant</span>
+            </div>
           </div>
         </div>
       </header>
@@ -270,6 +357,13 @@ export default function VoiceReportPage() {
             </p>
           </div>
 
+          {/* Debug Panel */}
+          {showDebug && (
+            <div className="mb-8">
+              <VapiDebug />
+            </div>
+          )}
+
           {/* Error Alert */}
           {errorMessage && (
             <Alert className="mb-6 border-red-200 bg-red-50">
@@ -279,10 +373,34 @@ export default function VoiceReportPage() {
           )}
 
           {/* VAPI Status Alert */}
-          {!vapiLoaded && (
+          {!vapiLoaded && callStatus !== "error" && (
             <Alert className="mb-6 border-blue-200 bg-blue-50">
               <Loader2 className="h-4 w-4 text-blue-600 animate-spin" />
               <AlertDescription className="text-blue-800">Loading voice assistant...</AlertDescription>
+            </Alert>
+          )}
+
+          {/* SDK Loading Error with Retry Options */}
+          {callStatus === "error" && !vapiLoaded && (
+            <Alert className="mb-6 border-red-200 bg-red-50">
+              <AlertCircle className="h-4 w-4 text-red-600" />
+              <AlertDescription className="text-red-800">
+                <div className="space-y-3">
+                  <p>{errorMessage}</p>
+                  <div className="flex gap-2">
+                    <Button onClick={retrySDKLoad} size="sm" variant="outline">
+                      <Loader2 className="h-4 w-4 mr-2" />
+                      Retry Loading
+                    </Button>
+                    <Button onClick={loadSDKManually} size="sm" variant="outline">
+                      Try Manual Load
+                    </Button>
+                    <Button asChild size="sm">
+                      <Link href="/report">Use Text Form</Link>
+                    </Button>
+                  </div>
+                </div>
+              </AlertDescription>
             </Alert>
           )}
 
@@ -439,6 +557,22 @@ export default function VoiceReportPage() {
               )}
             </CardContent>
           </Card>
+
+          {/* Fallback Simple VAPI Integration */}
+          {callStatus === "error" && !vapiLoaded && (
+            <div className="mb-8">
+              <h2 className="text-xl font-semibold text-center mb-4">Try Alternative Voice Assistant</h2>
+              <VapiSimple
+                onTranscript={(newTranscript) => {
+                  setTranscript((prev) => prev + (prev ? " " : "") + newTranscript)
+                  setConversationStarted(true)
+                }}
+                onCallEnd={() => {
+                  setConversationStarted(true)
+                }}
+              />
+            </div>
+          )}
 
           {/* Live Transcription */}
           {conversationStarted && (
