@@ -45,6 +45,9 @@ export default function HomePage() {
             <Button asChild variant="outline" size="lg" className="text-lg px-8 py-6">
               <Link href="/voice-report">Voice Report</Link>
             </Button>
+            <Button asChild variant="secondary" size="lg" className="text-lg px-8 py-6">
+              <Link href="/track-report">Track Report</Link>
+            </Button>
           </div>
         </div>
       </section>
