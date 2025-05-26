@@ -14,6 +14,12 @@ interface VapiSimpleProps {
   onCallEnd?: () => void
 }
 
+declare global {
+  interface Window {
+    Vapi: any
+  }
+}
+
 export function VapiSimple({ onTranscript, onCallEnd }: VapiSimpleProps) {
   const [isConnected, setIsConnected] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
