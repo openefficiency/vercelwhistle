@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -10,7 +10,7 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Checkbox } from "@/components/ui/checkbox"
-import { Shield, ArrowLeft, Upload, Eye, EyeOff } from "lucide-react"
+import { Shield, ArrowLeft, Upload, Eye, EyeOff, Mic } from "lucide-react"
 import Link from "next/link"
 
 export default function ReportPage() {
@@ -19,6 +19,17 @@ export default function ReportPage() {
   const [description, setDescription] = useState("")
   const [contactInfo, setContactInfo] = useState("")
   const [showContactInfo, setShowContactInfo] = useState(false)
+  const [prefilledTranscript, setPrefilledTranscript] = useState("")
+
+  useEffect(() => {
+    // Check for transcript in URL parameters
+    const urlParams = new URLSearchParams(window.location.search)
+    const transcript = urlParams.get("transcript")
+    if (transcript) {
+      setPrefilledTranscript(transcript)
+      setDescription(transcript)
+    }
+  }, [])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -82,6 +93,15 @@ export default function ReportPage() {
                   </Label>
                   <Shield className="h-4 w-4 text-blue-600 ml-auto" />
                 </div>
+
+                {prefilledTranscript && (
+                  <div className="flex items-center space-x-2 p-4 bg-green-50 rounded-lg">
+                    <Mic className="h-4 w-4 text-green-600" />
+                    <span className="text-sm font-medium text-green-800">
+                      Transcript from voice recording has been automatically filled in the description below.
+                    </span>
+                  </div>
+                )}
 
                 {/* Report Type */}
                 <div className="space-y-2">
