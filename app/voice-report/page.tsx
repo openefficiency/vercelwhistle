@@ -22,6 +22,7 @@ import {
   HelpCircle,
   CheckCircle,
   X,
+  Loader2,
 } from "lucide-react"
 import Link from "next/link"
 import { Alert, AlertDescription } from "@/components/ui/alert"
@@ -57,6 +58,7 @@ declare global {
   interface Window {
     SpeechRecognition: new () => SpeechRecognition
     webkitSpeechRecognition: new () => SpeechRecognition
+    Vapi: any
   }
 }
 
@@ -92,6 +94,9 @@ export default function VoiceReportPage() {
   } | null>(null)
   const [showCommandHelp, setShowCommandHelp] = useState(false)
   const [commandHistory, setCommandHistory] = useState<string[]>([])
+  const [vapiLoaded, setVapiLoaded] = useState(false)
+  const [vapiTranscript, setVapiTranscript] = useState("")
+  const [callId, setCallId] = useState<string | null>(null)
 
   const recognitionRef = useRef<SpeechRecognition | null>(null)
   const transcriptRef = useRef<HTMLDivElement>(null)
@@ -138,6 +143,94 @@ export default function VoiceReportPage() {
       action: () => setShowCommandHelp(true),
     },
   ]
+
+  // Load VAPI SDK
+  useEffect(() => {
+    const loadVapiSDK = () => {
+      if (window.Vapi) {
+        setVapiLoaded(true)
+        return
+      }
+
+      const script = document.createElement("script")
+      script.src = "https://cdn.jsdelivr.net/npm/@vapi-ai/web@latest/dist/index.js"
+      script.onload = () => {
+        setVapiLoaded(true)
+        console.log("VAPI SDK loaded successfully")
+      }
+      script.onerror = () => {
+        console.error("Failed to load VAPI SDK")
+        setErrorMessage("Failed to load VAPI SDK. Voice assistant may not work properly.")
+      }
+      document.head.appendChild(script)
+    }
+
+    loadVapiSDK()
+  }, [])
+
+  // Initialize VAPI client
+  useEffect(() => {
+    if (!vapiLoaded) return
+
+    const initVAPI = async () => {
+      try {
+        console.log("Initializing VAPI with public key:", VAPI_PUBLIC_KEY)
+
+        const vapi = new window.Vapi(VAPI_PUBLIC_KEY)
+
+        // Set up event listeners
+        vapi.on("call-start", () => {
+          console.log("VAPI call started")
+          setCallStatus("connected")
+          setIsConnected(true)
+          setIsRecording(true)
+        })
+
+        vapi.on("call-end", () => {
+          console.log("VAPI call ended")
+          setCallStatus("ended")
+          setIsConnected(false)
+          setIsRecording(false)
+          setCallId(null)
+        })
+
+        vapi.on("speech-start", () => {
+          console.log("User started speaking")
+        })
+
+        vapi.on("speech-end", () => {
+          console.log("User stopped speaking")
+        })
+
+        vapi.on("message", (message: any) => {
+          console.log("VAPI message:", message)
+          if (message.type === "transcript" && message.transcript) {
+            setVapiTranscript((prev) => prev + " " + message.transcript)
+            setTranscript((prev) => prev + " " + message.transcript)
+          }
+        })
+
+        vapi.on("error", (error: any) => {
+          console.error("VAPI error:", error)
+          setErrorMessage(`VAPI error: ${error.message || "Unknown error"}`)
+          setCallStatus("error")
+        })
+
+        vapi.on("volume-level", (volume: number) => {
+          // Handle volume level for visualization
+          console.log("Volume level:", volume)
+        })
+
+        setVapiClient(vapi)
+      } catch (error) {
+        console.error("Failed to initialize VAPI:", error)
+        setErrorMessage("Failed to initialize VAPI. Please check your internet connection.")
+        setCallStatus("error")
+      }
+    }
+
+    initVAPI()
+  }, [vapiLoaded])
 
   // Command detection function
   const detectVoiceCommand = (text: string) => {
@@ -300,39 +393,6 @@ export default function VoiceReportPage() {
     }
   }, [])
 
-  // Initialize VAPI client
-  useEffect(() => {
-    const initVAPI = async () => {
-      try {
-        console.log("Initializing VAPI with public key:", VAPI_PUBLIC_KEY)
-
-        const mockVapiClient = {
-          start: async () => {
-            setCallStatus("connecting")
-            await new Promise((resolve) => setTimeout(resolve, 2000))
-            setCallStatus("connected")
-            setIsConnected(true)
-            setIsRecording(true)
-          },
-          stop: () => {
-            setCallStatus("ended")
-            setIsConnected(false)
-            setIsRecording(false)
-          },
-          isConnected: () => isConnected,
-        }
-
-        setVapiClient(mockVapiClient)
-      } catch (error) {
-        console.error("Failed to initialize VAPI:", error)
-        setErrorMessage("Failed to initialize voice assistant. You can still use speech-to-text transcription.")
-        setCallStatus("error")
-      }
-    }
-
-    initVAPI()
-  }, [])
-
   const startSpeechRecognition = () => {
     if (speechRecognition && speechSupported) {
       try {
@@ -359,53 +419,76 @@ export default function VoiceReportPage() {
     setTranscript("")
     setFinalTranscript("")
     setInterimTranscript("")
+    setVapiTranscript("")
     setWordCount(0)
     setConfidence(0)
     setCommandConfirmation(null)
   }
 
   const saveTranscript = () => {
-    if (!finalTranscript) {
+    const fullTranscript = finalTranscript + vapiTranscript
+    if (!fullTranscript.trim()) {
       setErrorMessage("No transcript to save.")
       return
     }
-    console.log("Saving transcript:", finalTranscript)
+    console.log("Saving transcript:", fullTranscript)
     alert("Transcript saved successfully!")
   }
 
   const submitReport = () => {
-    if (!finalTranscript) {
+    const fullTranscript = finalTranscript + vapiTranscript
+    if (!fullTranscript.trim()) {
       setErrorMessage("No transcript to submit.")
       return
     }
-    window.location.href = `/report?transcript=${encodeURIComponent(finalTranscript)}`
+    window.location.href = `/report?transcript=${encodeURIComponent(fullTranscript)}`
   }
 
   const startVAPICall = async () => {
     if (!vapiClient) {
-      setErrorMessage("Voice assistant not available. You can still use speech-to-text transcription.")
+      setErrorMessage("VAPI client not initialized. Please refresh the page and try again.")
       setCallStatus("error")
       return
     }
 
     try {
       setErrorMessage("")
-      await vapiClient.start()
+      setCallStatus("connecting")
+
+      // Start the call with the agent
+      const call = await vapiClient.start({
+        assistantId: VAPI_AGENT_ID,
+        // Optional: Add custom configuration
+        assistantOverrides: {
+          variableValues: {
+            reportType: "whistleblower",
+            platform: "aegis",
+          },
+        },
+      })
+
+      setCallId(call?.id || null)
+      console.log("VAPI call started with ID:", call?.id)
     } catch (error) {
       console.error("Failed to start VAPI call:", error)
-      setErrorMessage("Unable to start voice call. You can still use speech-to-text transcription.")
+      setErrorMessage(`Failed to start VAPI call: ${error instanceof Error ? error.message : "Unknown error"}`)
       setCallStatus("error")
     }
   }
 
   const endCall = () => {
-    if (vapiClient) {
-      vapiClient.stop()
+    if (vapiClient && isConnected) {
+      try {
+        vapiClient.stop()
+      } catch (error) {
+        console.error("Error stopping VAPI call:", error)
+      }
     }
     stopSpeechRecognition()
     setCallStatus("ended")
     setIsConnected(false)
     setIsRecording(false)
+    setCallId(null)
   }
 
   const getConfidenceColor = (conf: number) => {
@@ -441,8 +524,8 @@ export default function VoiceReportPage() {
           <div className="text-center mb-8">
             <h1 className="text-4xl font-bold text-gray-900 mb-4">Voice Report Assistant</h1>
             <p className="text-lg text-gray-600">
-              Speak naturally and use voice commands to control the interface. Your report is processed securely and
-              anonymously.
+              Speak naturally with our AI assistant or use voice commands to control the interface. Your report is
+              processed securely and anonymously.
             </p>
           </div>
 
@@ -497,11 +580,132 @@ export default function VoiceReportPage() {
           )}
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-            {/* Voice Controls */}
+            {/* VAPI AI Assistant */}
             <Card className="border-0 shadow-xl">
               <CardHeader className="text-center">
                 <CardTitle className="flex items-center justify-center space-x-2">
-                  <Mic className="h-6 w-6 text-blue-600" />
+                  <Phone className="h-6 w-6 text-blue-600" />
+                  <span>AI Voice Assistant</span>
+                  {!vapiLoaded && <Loader2 className="h-4 w-4 animate-spin" />}
+                </CardTitle>
+                <CardDescription>
+                  {vapiLoaded ? "Connect with our AI assistant for guided reporting" : "Loading VAPI SDK..."}
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                {/* VAPI Status */}
+                <div className="text-center">
+                  <div
+                    className={`inline-flex items-center px-4 py-2 rounded-full text-sm font-medium ${
+                      callStatus === "idle"
+                        ? "bg-gray-100 text-gray-700"
+                        : callStatus === "connecting"
+                          ? "bg-yellow-100 text-yellow-700"
+                          : callStatus === "connected"
+                            ? "bg-green-100 text-green-700"
+                            : callStatus === "error"
+                              ? "bg-red-100 text-red-700"
+                              : "bg-red-100 text-red-700"
+                    }`}
+                  >
+                    {callStatus === "idle" && "Ready to connect"}
+                    {callStatus === "connecting" && "Connecting to AI..."}
+                    {callStatus === "connected" && "Connected to AI assistant"}
+                    {callStatus === "ended" && "Call ended"}
+                    {callStatus === "error" && "Connection failed"}
+                  </div>
+                </div>
+
+                {/* Call ID Display */}
+                {callId && (
+                  <div className="text-center">
+                    <Badge variant="outline" className="text-xs">
+                      Call ID: {callId.slice(0, 8)}...
+                    </Badge>
+                  </div>
+                )}
+
+                {/* VAPI Voice Visualization */}
+                <div className="flex justify-center">
+                  <div
+                    className={`w-32 h-32 rounded-full border-4 flex items-center justify-center transition-all duration-300 ${
+                      isConnected
+                        ? "border-blue-500 bg-blue-50 animate-pulse"
+                        : callStatus === "error"
+                          ? "border-red-300 bg-red-50"
+                          : "border-gray-300 bg-gray-50"
+                    }`}
+                  >
+                    {callStatus === "error" ? (
+                      <AlertCircle className="h-12 w-12 text-red-500" />
+                    ) : callStatus === "connecting" ? (
+                      <Loader2 className="h-12 w-12 text-blue-500 animate-spin" />
+                    ) : isConnected ? (
+                      <Phone className="h-12 w-12 text-blue-500" />
+                    ) : (
+                      <PhoneOff className="h-12 w-12 text-gray-400" />
+                    )}
+                  </div>
+                </div>
+
+                {/* VAPI Controls */}
+                <div className="flex justify-center space-x-4">
+                  {!isConnected && callStatus !== "error" ? (
+                    <Button
+                      onClick={startVAPICall}
+                      size="lg"
+                      className="px-8 py-6 text-lg"
+                      disabled={callStatus === "connecting" || !vapiLoaded}
+                    >
+                      <Phone className="h-5 w-5 mr-2" />
+                      {callStatus === "connecting" ? "Connecting..." : "Start AI Assistant"}
+                    </Button>
+                  ) : callStatus === "error" ? (
+                    <Button
+                      onClick={() => {
+                        setCallStatus("idle")
+                        setErrorMessage("")
+                      }}
+                      variant="outline"
+                      size="lg"
+                      className="px-8 py-6 text-lg"
+                    >
+                      Try Again
+                    </Button>
+                  ) : (
+                    <Button onClick={endCall} variant="destructive" size="lg" className="px-8 py-6 text-lg">
+                      <PhoneOff className="h-5 w-5 mr-2" />
+                      End Call
+                    </Button>
+                  )}
+                </div>
+
+                {/* VAPI Instructions */}
+                <div className="bg-blue-50 p-4 rounded-lg">
+                  <h3 className="font-semibold text-blue-900 mb-2">AI Assistant Features:</h3>
+                  <ul className="text-sm text-blue-800 space-y-1">
+                    <li>• Guided interview process for your report</li>
+                    <li>• Natural conversation with AI agent</li>
+                    <li>• Automatic transcription and categorization</li>
+                    <li>• Secure and anonymous interaction</li>
+                  </ul>
+                </div>
+
+                {/* VAPI Transcript */}
+                {vapiTranscript && (
+                  <div className="bg-gray-50 p-4 rounded-lg">
+                    <h3 className="font-semibold text-gray-900 mb-2">AI Conversation:</h3>
+                    <p className="text-sm text-gray-700 whitespace-pre-wrap">{vapiTranscript}</p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Speech Recognition */}
+            <Card className="border-0 shadow-xl">
+              <CardHeader className="text-center">
+                <CardTitle className="flex items-center justify-center space-x-2">
+                  <Mic className="h-6 w-6 text-purple-600" />
                   <span>Speech Recognition</span>
                 </CardTitle>
                 <CardDescription>Real-time speech-to-text with voice commands</CardDescription>
@@ -588,7 +792,7 @@ export default function VoiceReportPage() {
                     variant="outline"
                     size="lg"
                     className="px-6 py-3"
-                    disabled={!finalTranscript}
+                    disabled={!finalTranscript && !vapiTranscript}
                   >
                     <RotateCcw className="h-4 w-4 mr-2" />
                     Clear
@@ -655,195 +859,118 @@ export default function VoiceReportPage() {
                     </div>
                   </div>
                 )}
-
-                {/* Browser Support Notice */}
-                {!speechSupported && (
-                  <div className="bg-amber-50 p-4 rounded-lg border border-amber-200">
-                    <h3 className="font-semibold text-amber-900 mb-2">Browser Not Supported</h3>
-                    <p className="text-sm text-amber-800">
-                      Speech recognition requires Chrome, Edge, or Safari. Please switch browsers or use the text form.
-                    </p>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
-            {/* Live Transcription */}
-            <Card className="border-0 shadow-xl">
-              <CardHeader>
-                <div className="flex items-center justify-between">
-                  <CardTitle className="flex items-center space-x-2">
-                    <Edit3 className="h-5 w-5 text-purple-600" />
-                    <span>Live Transcription</span>
-                  </CardTitle>
-                  <div className="flex gap-2">
-                    <Badge variant={isListening ? "default" : "secondary"}>
-                      {isListening ? "Recording" : "Stopped"}
-                    </Badge>
-                    {confidence > 0 && (
-                      <Badge variant="outline" className={getConfidenceColor(confidence)}>
-                        {Math.round(confidence * 100)}%
-                      </Badge>
-                    )}
-                    {voiceCommandsEnabled && (
-                      <Badge variant="outline" className="text-purple-600">
-                        <Command className="h-3 w-3 mr-1" />
-                        Commands
-                      </Badge>
-                    )}
-                  </div>
-                </div>
-                <CardDescription>Your speech appears here in real-time</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {/* Transcription Display */}
-                <div className="space-y-2">
-                  <Label htmlFor="transcript">Transcription</Label>
-                  <div
-                    ref={transcriptRef}
-                    className="min-h-[200px] max-h-[300px] p-4 border rounded-lg bg-white overflow-y-auto"
-                  >
-                    {finalTranscript && <span className="text-gray-900">{finalTranscript}</span>}
-                    {interimTranscript && <span className="text-gray-500 italic">{interimTranscript}</span>}
-                    {!finalTranscript && !interimTranscript && (
-                      <span className="text-gray-400">
-                        Start speaking to see your words appear here...
-                        {voiceCommandsEnabled && (
-                          <span className="block mt-2 text-purple-500">
-                            Try saying "help" to see available voice commands
-                          </span>
-                        )}
-                      </span>
-                    )}
-                    {isListening && <span className="inline-block w-2 h-4 bg-green-500 animate-pulse ml-1"></span>}
-                  </div>
-                </div>
-
-                {/* Edit Transcription */}
-                {finalTranscript && (
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <Label htmlFor="edit-transcript">Edit Transcription</Label>
-                      <Button variant="ghost" size="sm" onClick={() => setIsEditingTranscript(!isEditingTranscript)}>
-                        <Edit3 className="h-4 w-4 mr-1" />
-                        {isEditingTranscript ? "View" : "Edit"}
-                      </Button>
-                    </div>
-
-                    {isEditingTranscript ? (
-                      <Textarea
-                        id="edit-transcript"
-                        value={finalTranscript}
-                        onChange={(e) => setFinalTranscript(e.target.value)}
-                        className="min-h-[150px]"
-                        placeholder="Edit your transcription here..."
-                      />
-                    ) : (
-                      <div className="p-4 bg-gray-50 rounded-lg min-h-[150px] whitespace-pre-wrap">
-                        {finalTranscript || "No transcription to edit yet."}
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {/* Action Buttons */}
-                <div className="flex gap-3">
-                  <Button onClick={saveTranscript} disabled={!finalTranscript} className="flex-1">
-                    <Save className="h-4 w-4 mr-2" />
-                    Save Transcript
-                  </Button>
-                  <Button asChild variant="outline" disabled={!finalTranscript}>
-                    <Link href={`/report?transcript=${encodeURIComponent(finalTranscript)}`}>Continue to Form</Link>
-                  </Button>
-                </div>
-
-                {/* Voice Command Tip */}
-                {voiceCommandsEnabled && finalTranscript && (
-                  <div className="p-3 bg-blue-50 rounded-lg border border-blue-200">
-                    <p className="text-sm text-blue-800">
-                      💡 <strong>Voice Tip:</strong> Say "save" to save your transcript or "submit" to continue to the
-                      report form.
-                    </p>
-                  </div>
-                )}
               </CardContent>
             </Card>
           </div>
 
-          {/* VAPI Integration Section */}
+          {/* Combined Transcription */}
           <Card className="mt-8 border-0 shadow-xl">
-            <CardHeader className="text-center">
-              <CardTitle className="flex items-center justify-center space-x-2">
-                <Phone className="h-6 w-6 text-blue-600" />
-                <span>AI Voice Assistant (Demo)</span>
-              </CardTitle>
-              <CardDescription>Connect with our AI assistant for guided reporting</CardDescription>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <CardTitle className="flex items-center space-x-2">
+                  <Edit3 className="h-5 w-5 text-green-600" />
+                  <span>Combined Transcription</span>
+                </CardTitle>
+                <div className="flex gap-2">
+                  <Badge variant={isListening || isConnected ? "default" : "secondary"}>
+                    {isListening || isConnected ? "Recording" : "Stopped"}
+                  </Badge>
+                  {confidence > 0 && (
+                    <Badge variant="outline" className={getConfidenceColor(confidence)}>
+                      {Math.round(confidence * 100)}%
+                    </Badge>
+                  )}
+                  {voiceCommandsEnabled && (
+                    <Badge variant="outline" className="text-purple-600">
+                      <Command className="h-3 w-3 mr-1" />
+                      Commands
+                    </Badge>
+                  )}
+                </div>
+              </div>
+              <CardDescription>Combined transcript from AI assistant and speech recognition</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-6">
-              {/* VAPI Status */}
-              <div className="text-center">
+            <CardContent className="space-y-4">
+              {/* Transcription Display */}
+              <div className="space-y-2">
+                <Label htmlFor="transcript">Full Transcription</Label>
                 <div
-                  className={`inline-flex items-center px-4 py-2 rounded-full text-sm font-medium ${
-                    callStatus === "idle"
-                      ? "bg-gray-100 text-gray-700"
-                      : callStatus === "connecting"
-                        ? "bg-yellow-100 text-yellow-700"
-                        : callStatus === "connected"
-                          ? "bg-green-100 text-green-700"
-                          : callStatus === "error"
-                            ? "bg-red-100 text-red-700"
-                            : "bg-red-100 text-red-700"
-                  }`}
+                  ref={transcriptRef}
+                  className="min-h-[200px] max-h-[300px] p-4 border rounded-lg bg-white overflow-y-auto"
                 >
-                  {callStatus === "idle" && "Ready to connect"}
-                  {callStatus === "connecting" && "Connecting to AI..."}
-                  {callStatus === "connected" && "Connected to AI assistant"}
-                  {callStatus === "ended" && "Call ended"}
-                  {callStatus === "error" && "Connection failed"}
+                  {(finalTranscript || vapiTranscript) && (
+                    <span className="text-gray-900">{finalTranscript + vapiTranscript}</span>
+                  )}
+                  {interimTranscript && <span className="text-gray-500 italic">{interimTranscript}</span>}
+                  {!finalTranscript && !vapiTranscript && !interimTranscript && (
+                    <span className="text-gray-400">
+                      Start the AI assistant or speech recognition to see your words appear here...
+                      {voiceCommandsEnabled && (
+                        <span className="block mt-2 text-purple-500">
+                          Try saying "help" to see available voice commands
+                        </span>
+                      )}
+                    </span>
+                  )}
+                  {(isListening || isConnected) && (
+                    <span className="inline-block w-2 h-4 bg-green-500 animate-pulse ml-1"></span>
+                  )}
                 </div>
               </div>
 
-              {/* VAPI Controls */}
-              <div className="flex justify-center space-x-4">
-                {!isConnected && callStatus !== "error" ? (
-                  <Button
-                    onClick={startVAPICall}
-                    size="lg"
-                    variant="outline"
-                    className="px-8 py-6 text-lg"
-                    disabled={callStatus === "connecting"}
-                  >
-                    <Phone className="h-5 w-5 mr-2" />
-                    {callStatus === "connecting" ? "Connecting..." : "Connect to AI Assistant"}
-                  </Button>
-                ) : callStatus === "error" ? (
-                  <Button
-                    onClick={() => {
-                      setCallStatus("idle")
-                      setErrorMessage("")
-                    }}
-                    variant="outline"
-                    size="lg"
-                    className="px-8 py-6 text-lg"
-                  >
-                    Try Again
-                  </Button>
-                ) : (
-                  <Button onClick={endCall} variant="destructive" size="lg" className="px-8 py-6 text-lg">
-                    <PhoneOff className="h-5 w-5 mr-2" />
-                    End AI Session
-                  </Button>
-                )}
+              {/* Edit Transcription */}
+              {(finalTranscript || vapiTranscript) && (
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="edit-transcript">Edit Transcription</Label>
+                    <Button variant="ghost" size="sm" onClick={() => setIsEditingTranscript(!isEditingTranscript)}>
+                      <Edit3 className="h-4 w-4 mr-1" />
+                      {isEditingTranscript ? "View" : "Edit"}
+                    </Button>
+                  </div>
+
+                  {isEditingTranscript ? (
+                    <Textarea
+                      id="edit-transcript"
+                      value={finalTranscript + vapiTranscript}
+                      onChange={(e) => {
+                        const newValue = e.target.value
+                        setFinalTranscript(newValue)
+                        setVapiTranscript("")
+                      }}
+                      className="min-h-[150px]"
+                      placeholder="Edit your transcription here..."
+                    />
+                  ) : (
+                    <div className="p-4 bg-gray-50 rounded-lg min-h-[150px] whitespace-pre-wrap">
+                      {finalTranscript + vapiTranscript || "No transcription to edit yet."}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Action Buttons */}
+              <div className="flex gap-3">
+                <Button onClick={saveTranscript} disabled={!finalTranscript && !vapiTranscript} className="flex-1">
+                  <Save className="h-4 w-4 mr-2" />
+                  Save Transcript
+                </Button>
+                <Button asChild variant="outline" disabled={!finalTranscript && !vapiTranscript}>
+                  <Link href={`/report?transcript=${encodeURIComponent(finalTranscript + vapiTranscript)}`}>
+                    Continue to Form
+                  </Link>
+                </Button>
               </div>
 
-              {/* Demo Notice */}
-              <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
-                <h3 className="font-semibold text-blue-900 mb-2">AI Assistant Demo</h3>
-                <p className="text-sm text-blue-800">
-                  The AI assistant is in demo mode. Use the speech-to-text feature above with voice commands for real
-                  transcription, then continue to the report form with your transcript.
-                </p>
-              </div>
+              {/* Voice Command Tip */}
+              {voiceCommandsEnabled && (finalTranscript || vapiTranscript) && (
+                <div className="p-3 bg-blue-50 rounded-lg border border-blue-200">
+                  <p className="text-sm text-blue-800">
+                    💡 <strong>Voice Tip:</strong> Say "save" to save your transcript or "submit" to continue to the
+                    report form.
+                  </p>
+                </div>
+              )}
             </CardContent>
           </Card>
 
