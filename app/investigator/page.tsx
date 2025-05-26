@@ -1,15 +1,13 @@
 "use client"
 
 import { useState } from "react"
-import { useSession, signOut } from "next-auth/react"
+import { useAuth } from "@/lib/auth-context"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { ProtectedRoute } from "@/components/protected-route"
-import { Eye, FileText, Clock, MessageSquare, Upload, Calendar, LogOut } from "lucide-react"
+import { Eye, FileText, Clock, MessageSquare, Calendar, LogOut } from "lucide-react"
 
 // Mock data for assigned cases
 const mockCases = [
@@ -42,7 +40,7 @@ const mockCases = [
 ]
 
 function InvestigatorContent() {
-  const { data: session } = useSession()
+  const { user, logout } = useAuth()
   const [selectedCase, setSelectedCase] = useState(mockCases[0])
   const [newNote, setNewNote] = useState("")
 
@@ -89,9 +87,9 @@ function InvestigatorContent() {
             </div>
             <div className="flex items-center space-x-4">
               <Badge variant="outline" className="text-purple-600 border-purple-600">
-                {session?.user?.name} - {session?.user?.department}
+                {user?.name} - {user?.department}
               </Badge>
-              <Button variant="outline" size="sm" onClick={() => signOut()}>
+              <Button variant="outline" size="sm" onClick={logout}>
                 <LogOut className="h-4 w-4 mr-2" />
                 Sign Out
               </Button>
@@ -145,174 +143,66 @@ function InvestigatorContent() {
 
           {/* Case Details */}
           <div className="lg:col-span-2">
-            <Tabs defaultValue="overview" className="space-y-6">
-              <TabsList className="grid w-full grid-cols-4">
-                <TabsTrigger value="overview">Overview</TabsTrigger>
-                <TabsTrigger value="evidence">Evidence</TabsTrigger>
-                <TabsTrigger value="notes">Notes</TabsTrigger>
-                <TabsTrigger value="timeline">Timeline</TabsTrigger>
-              </TabsList>
+            <Card>
+              <CardHeader>
+                <div className="flex items-start justify-between">
+                  <div>
+                    <CardTitle>{selectedCase.title}</CardTitle>
+                    <CardDescription>Case ID: {selectedCase.id}</CardDescription>
+                  </div>
+                  <div className="flex gap-2">
+                    <Badge className={getStatusColor(selectedCase.status)}>{selectedCase.status}</Badge>
+                    <Badge className={getPriorityColor(selectedCase.priority)}>{selectedCase.priority}</Badge>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <div>
+                  <h3 className="font-semibold mb-2">Case Description</h3>
+                  <p className="text-gray-700">{selectedCase.description}</p>
+                </div>
 
-              <TabsContent value="overview">
-                <Card>
-                  <CardHeader>
-                    <div className="flex items-start justify-between">
-                      <div>
-                        <CardTitle>{selectedCase.title}</CardTitle>
-                        <CardDescription>Case ID: {selectedCase.id}</CardDescription>
-                      </div>
-                      <div className="flex gap-2">
-                        <Badge className={getStatusColor(selectedCase.status)}>{selectedCase.status}</Badge>
-                        <Badge className={getPriorityColor(selectedCase.priority)}>{selectedCase.priority}</Badge>
-                      </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <Label className="text-sm font-medium text-gray-600">Assigned Date</Label>
+                    <div className="flex items-center mt-1">
+                      <Calendar className="h-4 w-4 text-gray-400 mr-2" />
+                      <span>{new Date(selectedCase.assignedDate).toLocaleDateString()}</span>
                     </div>
-                  </CardHeader>
-                  <CardContent className="space-y-6">
-                    <div>
-                      <h3 className="font-semibold mb-2">Case Description</h3>
-                      <p className="text-gray-700">{selectedCase.description}</p>
+                  </div>
+                  <div>
+                    <Label className="text-sm font-medium text-gray-600">Due Date</Label>
+                    <div className="flex items-center mt-1">
+                      <Clock className="h-4 w-4 text-gray-400 mr-2" />
+                      <span>{new Date(selectedCase.dueDate).toLocaleDateString()}</span>
                     </div>
+                  </div>
+                </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div>
-                        <Label className="text-sm font-medium text-gray-600">Assigned Date</Label>
-                        <div className="flex items-center mt-1">
-                          <Calendar className="h-4 w-4 text-gray-400 mr-2" />
-                          <span>{new Date(selectedCase.assignedDate).toLocaleDateString()}</span>
-                        </div>
-                      </div>
-                      <div>
-                        <Label className="text-sm font-medium text-gray-600">Due Date</Label>
-                        <div className="flex items-center mt-1">
-                          <Clock className="h-4 w-4 text-gray-400 mr-2" />
-                          <span>{new Date(selectedCase.dueDate).toLocaleDateString()}</span>
-                        </div>
-                      </div>
-                    </div>
+                <div>
+                  <Label className="text-sm font-medium text-gray-600 mb-2 block">Progress</Label>
+                  <div className="w-full bg-gray-200 rounded-full h-3">
+                    <div
+                      className="bg-purple-600 h-3 rounded-full transition-all duration-300"
+                      style={{ width: `${selectedCase.progress}%` }}
+                    ></div>
+                  </div>
+                  <span className="text-sm text-gray-500 mt-1">{selectedCase.progress}% complete</span>
+                </div>
 
-                    <div>
-                      <Label className="text-sm font-medium text-gray-600 mb-2 block">Progress</Label>
-                      <div className="w-full bg-gray-200 rounded-full h-3">
-                        <div
-                          className="bg-purple-600 h-3 rounded-full transition-all duration-300"
-                          style={{ width: `${selectedCase.progress}%` }}
-                        ></div>
-                      </div>
-                      <span className="text-sm text-gray-500 mt-1">{selectedCase.progress}% complete</span>
-                    </div>
-
-                    <div className="flex gap-3">
-                      <Button>
-                        <MessageSquare className="h-4 w-4 mr-2" />
-                        Contact Ethics Officer
-                      </Button>
-                      <Button variant="outline">
-                        <FileText className="h-4 w-4 mr-2" />
-                        Generate Report
-                      </Button>
-                      <Button variant="outline">Update Status</Button>
-                    </div>
-                  </CardContent>
-                </Card>
-              </TabsContent>
-
-              <TabsContent value="evidence">
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Evidence & Documents</CardTitle>
-                    <CardDescription>Manage case evidence and supporting documents</CardDescription>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    {/* Upload Area */}
-                    <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center">
-                      <Upload className="h-8 w-8 text-gray-400 mx-auto mb-2" />
-                      <p className="text-sm text-gray-600">Drag and drop evidence files here, or click to select</p>
-                      <Button variant="outline" size="sm" className="mt-2">
-                        Upload Files
-                      </Button>
-                    </div>
-
-                    {/* Evidence List */}
-                    <div className="space-y-2">
-                      <h3 className="font-semibold">Current Evidence</h3>
-                      {selectedCase.evidence.map((file, index) => (
-                        <div key={index} className="flex items-center justify-between p-3 border rounded-lg">
-                          <div className="flex items-center space-x-3">
-                            <FileText className="h-5 w-5 text-gray-400" />
-                            <span className="text-sm">{file}</span>
-                          </div>
-                          <div className="flex gap-2">
-                            <Button variant="outline" size="sm">
-                              View
-                            </Button>
-                            <Button variant="outline" size="sm">
-                              Download
-                            </Button>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </CardContent>
-                </Card>
-              </TabsContent>
-
-              <TabsContent value="notes">
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Investigation Notes</CardTitle>
-                    <CardDescription>Document your investigation progress and findings</CardDescription>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    {/* Current Notes */}
-                    {selectedCase.notes && (
-                      <div className="p-4 bg-gray-50 rounded-lg">
-                        <h3 className="font-semibold mb-2">Previous Notes</h3>
-                        <p className="text-sm text-gray-700">{selectedCase.notes}</p>
-                      </div>
-                    )}
-
-                    {/* Add New Note */}
-                    <div className="space-y-2">
-                      <Label htmlFor="new-note">Add Investigation Note</Label>
-                      <Textarea
-                        id="new-note"
-                        placeholder="Document your findings, interviews, or next steps..."
-                        value={newNote}
-                        onChange={(e) => setNewNote(e.target.value)}
-                        className="min-h-[100px]"
-                      />
-                      <Button>Save Note</Button>
-                    </div>
-                  </CardContent>
-                </Card>
-              </TabsContent>
-
-              <TabsContent value="timeline">
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Case Timeline</CardTitle>
-                    <CardDescription>Track important events and milestones</CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-4">
-                      {[
-                        { date: "2024-01-15", event: "Case assigned to investigator", type: "assignment" },
-                        { date: "2024-01-14", event: "Initial report submitted", type: "report" },
-                        { date: "2024-01-14", event: "Case created by ethics officer", type: "creation" },
-                      ].map((item, index) => (
-                        <div key={index} className="flex items-start space-x-3">
-                          <div className="flex-shrink-0 w-2 h-2 bg-purple-600 rounded-full mt-2"></div>
-                          <div>
-                            <p className="text-sm font-medium">{item.event}</p>
-                            <p className="text-xs text-gray-500">{new Date(item.date).toLocaleDateString()}</p>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </CardContent>
-                </Card>
-              </TabsContent>
-            </Tabs>
+                <div className="flex gap-3">
+                  <Button>
+                    <MessageSquare className="h-4 w-4 mr-2" />
+                    Contact Ethics Officer
+                  </Button>
+                  <Button variant="outline">
+                    <FileText className="h-4 w-4 mr-2" />
+                    Generate Report
+                  </Button>
+                  <Button variant="outline">Update Status</Button>
+                </div>
+              </CardContent>
+            </Card>
           </div>
         </div>
       </div>

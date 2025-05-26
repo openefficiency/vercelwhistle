@@ -1,7 +1,7 @@
 "use client"
 
 import type React from "react"
-import { useSession } from "next-auth/react"
+import { useAuth } from "@/lib/auth-context"
 import { useRouter } from "next/navigation"
 import { useEffect, useState } from "react"
 import { Loader2, Shield, AlertTriangle } from "lucide-react"
@@ -16,25 +16,25 @@ interface ProtectedRouteProps {
 }
 
 export function ProtectedRoute({ children, allowedRoles, redirectTo = "/login" }: ProtectedRouteProps) {
-  const { data: session, status } = useSession()
+  const { user, loading } = useAuth()
   const router = useRouter()
   const [showError, setShowError] = useState(false)
 
   useEffect(() => {
-    if (status === "loading") return
+    if (loading) return
 
-    if (status === "unauthenticated") {
+    if (!user) {
       router.push(redirectTo)
       return
     }
 
-    if (session && allowedRoles && !allowedRoles.includes(session.user.role)) {
+    if (allowedRoles && !allowedRoles.includes(user.role)) {
       setShowError(true)
       return
     }
-  }, [session, status, router, allowedRoles, redirectTo])
+  }, [user, loading, router, allowedRoles, redirectTo])
 
-  if (status === "loading") {
+  if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 via-white to-purple-50">
         <div className="text-center">
@@ -45,7 +45,7 @@ export function ProtectedRoute({ children, allowedRoles, redirectTo = "/login" }
     )
   }
 
-  if (status === "unauthenticated") {
+  if (!user) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 via-white to-purple-50">
         <div className="text-center">
@@ -56,7 +56,7 @@ export function ProtectedRoute({ children, allowedRoles, redirectTo = "/login" }
     )
   }
 
-  if (showError || (session && allowedRoles && !allowedRoles.includes(session.user.role))) {
+  if (showError || (allowedRoles && !allowedRoles.includes(user.role))) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-red-50 via-white to-orange-50">
         <Card className="w-full max-w-md">

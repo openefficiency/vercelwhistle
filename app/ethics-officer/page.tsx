@@ -1,12 +1,11 @@
 "use client"
 
 import { useState } from "react"
-import { useSession, signOut } from "next-auth/react"
+import { useAuth } from "@/lib/auth-context"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { ProtectedRoute } from "@/components/protected-route"
 import {
   Shield,
@@ -18,7 +17,6 @@ import {
   Eye,
   MessageSquare,
   TrendingUp,
-  Users,
   LogOut,
 } from "lucide-react"
 
@@ -57,9 +55,8 @@ const mockReports = [
 ]
 
 function EthicsOfficerContent() {
-  const { data: session } = useSession()
+  const { user, logout } = useAuth()
   const [searchTerm, setSearchTerm] = useState("")
-  const [selectedStatus, setSelectedStatus] = useState("all")
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -95,8 +92,7 @@ function EthicsOfficerContent() {
     const matchesSearch =
       report.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
       report.id.toLowerCase().includes(searchTerm.toLowerCase())
-    const matchesStatus = selectedStatus === "all" || report.status === selectedStatus
-    return matchesSearch && matchesStatus
+    return matchesSearch
   })
 
   return (
@@ -114,9 +110,9 @@ function EthicsOfficerContent() {
             </div>
             <div className="flex items-center space-x-4">
               <Badge variant="outline" className="text-green-600 border-green-600">
-                {session?.user?.name} - {session?.user?.department}
+                {user?.name} - {user?.department}
               </Badge>
-              <Button variant="outline" size="sm" onClick={() => signOut()}>
+              <Button variant="outline" size="sm" onClick={logout}>
                 <LogOut className="h-4 w-4 mr-2" />
                 Sign Out
               </Button>
@@ -177,162 +173,74 @@ function EthicsOfficerContent() {
           </Card>
         </div>
 
-        {/* Main Content */}
-        <Tabs defaultValue="reports" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-4">
-            <TabsTrigger value="reports">All Reports</TabsTrigger>
-            <TabsTrigger value="analytics">Analytics</TabsTrigger>
-            <TabsTrigger value="investigators">Investigators</TabsTrigger>
-            <TabsTrigger value="settings">Settings</TabsTrigger>
-          </TabsList>
-
-          <TabsContent value="reports" className="space-y-6">
-            {/* Search and Filters */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Report Management</CardTitle>
-                <CardDescription>Review, assign, and track the progress of all submitted reports</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="flex flex-col sm:flex-row gap-4 mb-6">
-                  <div className="flex-1">
-                    <div className="relative">
-                      <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-                      <Input
-                        placeholder="Search reports by ID or description..."
-                        value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
-                        className="pl-10"
-                      />
-                    </div>
-                  </div>
-                  <div className="flex gap-2">
-                    <Button variant="outline" size="sm">
-                      <Filter className="h-4 w-4 mr-2" />
-                      Filter
-                    </Button>
-                    <Button variant="outline" size="sm">
-                      Export
-                    </Button>
-                  </div>
+        {/* Reports Management */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Report Management</CardTitle>
+            <CardDescription>Review, assign, and track the progress of all submitted reports</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="flex flex-col sm:flex-row gap-4 mb-6">
+              <div className="flex-1">
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                  <Input
+                    placeholder="Search reports by ID or description..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="pl-10"
+                  />
                 </div>
+              </div>
+              <div className="flex gap-2">
+                <Button variant="outline" size="sm">
+                  <Filter className="h-4 w-4 mr-2" />
+                  Filter
+                </Button>
+                <Button variant="outline" size="sm">
+                  Export
+                </Button>
+              </div>
+            </div>
 
-                {/* Reports List */}
-                <div className="space-y-4">
-                  {filteredReports.map((report) => (
-                    <Card key={report.id} className="hover:shadow-md transition-shadow">
-                      <CardContent className="p-6">
-                        <div className="flex items-start justify-between">
-                          <div className="flex-1">
-                            <div className="flex items-center gap-3 mb-2">
-                              <h3 className="font-semibold text-gray-900">{report.id}</h3>
-                              <Badge className={getStatusColor(report.status)}>{report.status}</Badge>
-                              <Badge className={getPriorityColor(report.priority)}>{report.priority}</Badge>
-                              {report.anonymous && <Badge variant="outline">Anonymous</Badge>}
-                            </div>
-                            <p className="text-gray-600 mb-3">{report.description}</p>
-                            <div className="flex items-center gap-4 text-sm text-gray-500">
-                              <span>Type: {report.type}</span>
-                              <span>Submitted: {new Date(report.submittedAt).toLocaleDateString()}</span>
-                              {report.assignedTo && <span>Assigned to: {report.assignedTo}</span>}
-                            </div>
-                          </div>
-                          <div className="flex gap-2 ml-4">
-                            <Button variant="outline" size="sm">
-                              <Eye className="h-4 w-4 mr-1" />
-                              View
-                            </Button>
-                            <Button variant="outline" size="sm">
-                              <MessageSquare className="h-4 w-4 mr-1" />
-                              Message
-                            </Button>
-                            <Button size="sm">Assign</Button>
-                          </div>
+            {/* Reports List */}
+            <div className="space-y-4">
+              {filteredReports.map((report) => (
+                <Card key={report.id} className="hover:shadow-md transition-shadow">
+                  <CardContent className="p-6">
+                    <div className="flex items-start justify-between">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-3 mb-2">
+                          <h3 className="font-semibold text-gray-900">{report.id}</h3>
+                          <Badge className={getStatusColor(report.status)}>{report.status}</Badge>
+                          <Badge className={getPriorityColor(report.priority)}>{report.priority}</Badge>
+                          {report.anonymous && <Badge variant="outline">Anonymous</Badge>}
                         </div>
-                      </CardContent>
-                    </Card>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          <TabsContent value="analytics">
-            <Card>
-              <CardHeader>
-                <CardTitle>Analytics Dashboard</CardTitle>
-                <CardDescription>Track trends and patterns in reported concerns</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div className="h-64 bg-gray-100 rounded-lg flex items-center justify-center">
-                    <p className="text-gray-500">Reports by Category Chart</p>
-                  </div>
-                  <div className="h-64 bg-gray-100 rounded-lg flex items-center justify-center">
-                    <p className="text-gray-500">Resolution Time Trends</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          <TabsContent value="investigators">
-            <Card>
-              <CardHeader>
-                <CardTitle>Investigator Management</CardTitle>
-                <CardDescription>Manage investigator assignments and workloads</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  {["John Smith", "Sarah Johnson", "Mike Wilson"].map((investigator) => (
-                    <div key={investigator} className="flex items-center justify-between p-4 border rounded-lg">
-                      <div className="flex items-center space-x-3">
-                        <Users className="h-8 w-8 text-gray-400" />
-                        <div>
-                          <h3 className="font-semibold">{investigator}</h3>
-                          <p className="text-sm text-gray-600">Active Cases: 3</p>
+                        <p className="text-gray-600 mb-3">{report.description}</p>
+                        <div className="flex items-center gap-4 text-sm text-gray-500">
+                          <span>Type: {report.type}</span>
+                          <span>Submitted: {new Date(report.submittedAt).toLocaleDateString()}</span>
+                          {report.assignedTo && <span>Assigned to: {report.assignedTo}</span>}
                         </div>
                       </div>
-                      <div className="flex gap-2">
+                      <div className="flex gap-2 ml-4">
                         <Button variant="outline" size="sm">
-                          View Cases
+                          <Eye className="h-4 w-4 mr-1" />
+                          View
                         </Button>
-                        <Button size="sm">Assign New</Button>
+                        <Button variant="outline" size="sm">
+                          <MessageSquare className="h-4 w-4 mr-1" />
+                          Message
+                        </Button>
+                        <Button size="sm">Assign</Button>
                       </div>
                     </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          <TabsContent value="settings">
-            <Card>
-              <CardHeader>
-                <CardTitle>Portal Settings</CardTitle>
-                <CardDescription>Configure portal preferences and notifications</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-6">
-                  <div>
-                    <h3 className="font-semibold mb-2">Notification Preferences</h3>
-                    <div className="space-y-2">
-                      <label className="flex items-center space-x-2">
-                        <input type="checkbox" defaultChecked />
-                        <span className="text-sm">Email notifications for new reports</span>
-                      </label>
-                      <label className="flex items-center space-x-2">
-                        <input type="checkbox" defaultChecked />
-                        <span className="text-sm">SMS alerts for critical reports</span>
-                      </label>
-                    </div>
-                  </div>
-                  <Button>Save Settings</Button>
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-        </Tabs>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
       </div>
     </div>
   )
