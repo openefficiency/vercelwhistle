@@ -1,8 +1,8 @@
 "use client"
 
-import { AuthProvider as CustomAuthProvider } from "@/lib/auth-context"
+import { SimpleAuthProvider } from "@/lib/simple-auth-context"
 import type { ReactNode } from "react"
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  return <CustomAuthProvider>{children}</CustomAuthProvider>
+  return <SimpleAuthProvider>{children}</SimpleAuthProvider>
 }

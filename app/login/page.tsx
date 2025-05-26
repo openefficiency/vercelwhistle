@@ -9,7 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { Shield, ArrowLeft, AlertCircle, Loader2, CheckCircle, RefreshCw } from "lucide-react"
+import { Shield, ArrowLeft, AlertCircle, Loader2, CheckCircle, RefreshCw, User } from "lucide-react"
 import Link from "next/link"
 
 export default function LoginPage() {
@@ -17,18 +17,38 @@ export default function LoginPage() {
   const [password, setPassword] = useState("")
   const [error, setError] = useState("")
   const [loading, setLoading] = useState(false)
-  const [testResult, setTestResult] = useState<any>(null)
+  const [apiTest, setApiTest] = useState<any>(null)
+  const [debugInfo, setDebugInfo] = useState<string[]>([])
   const { user, login } = useAuth()
   const router = useRouter()
 
-  // Test API connection
+  const addDebugInfo = (message: string) => {
+    console.log(message)
+    setDebugInfo((prev) => [...prev.slice(-4), `${new Date().toLocaleTimeString()}: ${message}`])
+  }
+
+  // Test API endpoints
   const testAPI = async () => {
     try {
-      const response = await fetch("/api/test-auth")
-      const data = await response.json()
-      setTestResult({ success: true, data })
+      addDebugInfo("🧪 Testing API endpoints...")
+
+      // Test basic API
+      const helloResponse = await fetch("/api/hello")
+      const helloData = await helloResponse.json()
+
+      // Test auth API
+      const authResponse = await fetch("/api/auth-test")
+      const authData = await authResponse.json()
+
+      setApiTest({
+        success: true,
+        hello: { status: helloResponse.status, data: helloData },
+        auth: { status: authResponse.status, data: authData },
+      })
+      addDebugInfo("✅ API tests completed successfully")
     } catch (error) {
-      setTestResult({ success: false, error: String(error) })
+      addDebugInfo(`💥 API test failed: ${error}`)
+      setApiTest({ success: false, error: String(error) })
     }
   }
 
@@ -39,18 +59,22 @@ export default function LoginPage() {
   // Redirect if already authenticated
   useEffect(() => {
     if (user) {
-      console.log("User authenticated, redirecting:", user.role)
+      addDebugInfo(`✅ User authenticated: ${user.name} (${user.role})`)
       switch (user.role) {
         case "ethics_officer":
+          addDebugInfo("🔄 Redirecting to Ethics Officer portal...")
           router.push("/ethics-officer")
           break
         case "investigator":
+          addDebugInfo("🔄 Redirecting to Investigator portal...")
           router.push("/investigator")
           break
         case "admin":
+          addDebugInfo("🔄 Redirecting to Admin dashboard...")
           router.push("/dashboard")
           break
         default:
+          addDebugInfo("🔄 Redirecting to default dashboard...")
           router.push("/dashboard")
       }
     }
@@ -61,19 +85,42 @@ export default function LoginPage() {
     setLoading(true)
     setError("")
 
-    console.log("Submitting login form...")
+    addDebugInfo(`📝 Manual login attempt for: ${email}`)
     const result = await login(email, password)
 
     if (!result.success) {
       setError(result.error || "Login failed")
+      addDebugInfo(`❌ Login failed: ${result.error}`)
+    } else {
+      addDebugInfo("✅ Manual login successful")
     }
 
     setLoading(false)
   }
 
-  const quickLogin = (userEmail: string, userPassword: string) => {
+  const quickLogin = async (userEmail: string, userPassword: string, roleName: string) => {
+    addDebugInfo(`🚀 Quick login clicked: ${roleName}`)
     setEmail(userEmail)
     setPassword(userPassword)
+    setError("")
+    setLoading(true)
+
+    addDebugInfo(`📧 Setting credentials: ${userEmail}`)
+
+    // Auto-submit after setting credentials
+    setTimeout(async () => {
+      addDebugInfo("🔐 Starting quick login authentication...")
+      const result = await login(userEmail, userPassword)
+
+      if (!result.success) {
+        setError(result.error || "Login failed")
+        addDebugInfo(`❌ Quick login failed: ${result.error}`)
+      } else {
+        addDebugInfo(`✅ Quick login successful for ${roleName}`)
+      }
+
+      setLoading(false)
+    }, 100)
   }
 
   if (user) {
@@ -109,11 +156,27 @@ export default function LoginPage() {
             <p className="text-gray-600">Access your secure portal</p>
           </div>
 
+          {/* Debug Info */}
+          {debugInfo.length > 0 && (
+            <Card className="mb-6 border-0 shadow-lg bg-gray-50">
+              <CardHeader>
+                <CardTitle className="text-sm">Debug Log</CardTitle>
+              </CardHeader>
+              <CardContent className="text-xs space-y-1">
+                {debugInfo.map((info, index) => (
+                  <div key={index} className="text-gray-700">
+                    {info}
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+          )}
+
           {/* API Test Status */}
           <Card className="mb-6 border-0 shadow-lg">
             <CardHeader>
               <CardTitle className="flex items-center text-sm">
-                {testResult?.success ? (
+                {apiTest?.success ? (
                   <CheckCircle className="h-4 w-4 text-green-600 mr-2" />
                 ) : (
                   <AlertCircle className="h-4 w-4 text-red-600 mr-2" />
@@ -124,12 +187,20 @@ export default function LoginPage() {
                 </Button>
               </CardTitle>
             </CardHeader>
-            <CardContent className="text-sm">
-              {testResult ? (
-                testResult.success ? (
-                  <div className="text-green-600">✅ API Working - {testResult.data.users.length} users available</div>
+            <CardContent className="text-sm space-y-1">
+              {apiTest ? (
+                apiTest.success ? (
+                  <>
+                    <div className="text-green-600">✅ Hello API: {apiTest.hello?.status}</div>
+                    <div className="text-green-600">✅ Auth API: {apiTest.auth?.status}</div>
+                    <div className="text-xs text-gray-500">
+                      <Link href="/test-api" className="underline">
+                        View detailed API tests
+                      </Link>
+                    </div>
+                  </>
                 ) : (
-                  <div className="text-red-600">❌ API Error: {testResult.error}</div>
+                  <div className="text-red-600">❌ API Error: {apiTest.error}</div>
                 )
               ) : (
                 <div className="text-gray-600">Testing API...</div>
@@ -195,43 +266,49 @@ export default function LoginPage() {
           <Card className="mt-6 border-0 shadow-lg bg-blue-50">
             <CardHeader>
               <CardTitle className="text-blue-900">Quick Login (Demo)</CardTitle>
-              <CardDescription className="text-blue-700">Click to auto-fill credentials</CardDescription>
+              <CardDescription className="text-blue-700">Click to auto-login with test credentials</CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
               <Button
                 variant="outline"
-                className="w-full justify-start"
-                onClick={() => quickLogin("jane.doe@company.com", "ethics123")}
+                className="w-full justify-start hover:bg-green-50 hover:border-green-300"
+                onClick={() => quickLogin("jane.doe@company.com", "ethics123", "Ethics Officer")}
+                disabled={loading}
               >
+                <User className="h-4 w-4 mr-3 text-green-600" />
                 <div className="text-left">
-                  <div className="font-semibold">Ethics Officer</div>
-                  <div className="text-sm text-gray-600">jane.doe@company.com</div>
+                  <div className="font-semibold text-green-900">Ethics Officer</div>
+                  <div className="text-sm text-green-700">jane.doe@company.com</div>
                 </div>
               </Button>
               <Button
                 variant="outline"
-                className="w-full justify-start"
-                onClick={() => quickLogin("john.smith@company.com", "investigate123")}
+                className="w-full justify-start hover:bg-purple-50 hover:border-purple-300"
+                onClick={() => quickLogin("john.smith@company.com", "investigate123", "Investigator")}
+                disabled={loading}
               >
+                <User className="h-4 w-4 mr-3 text-purple-600" />
                 <div className="text-left">
-                  <div className="font-semibold">Investigator</div>
-                  <div className="text-sm text-gray-600">john.smith@company.com</div>
+                  <div className="font-semibold text-purple-900">Investigator</div>
+                  <div className="text-sm text-purple-700">john.smith@company.com</div>
                 </div>
               </Button>
               <Button
                 variant="outline"
-                className="w-full justify-start"
-                onClick={() => quickLogin("admin@company.com", "admin123")}
+                className="w-full justify-start hover:bg-blue-50 hover:border-blue-300"
+                onClick={() => quickLogin("admin@company.com", "admin123", "Admin")}
+                disabled={loading}
               >
+                <User className="h-4 w-4 mr-3 text-blue-600" />
                 <div className="text-left">
-                  <div className="font-semibold">Admin</div>
-                  <div className="text-sm text-gray-600">admin@company.com</div>
+                  <div className="font-semibold text-blue-900">Admin</div>
+                  <div className="text-sm text-blue-700">admin@company.com</div>
                 </div>
               </Button>
             </CardContent>
           </Card>
 
-          {/* Whistleblower Notice */}
+          {/* Instructions */}
           <div className="mt-6 text-center">
             <p className="text-gray-600 mb-4">Are you a whistleblower looking to submit or track a report?</p>
             <div className="flex gap-3 justify-center">
