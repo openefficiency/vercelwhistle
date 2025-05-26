@@ -7,6 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { ProtectedRoute } from "@/components/protected-route"
+import { ClientOnly } from "@/components/client-only"
 import {
   Shield,
   Search,
@@ -18,6 +19,7 @@ import {
   MessageSquare,
   TrendingUp,
   LogOut,
+  Loader2,
 } from "lucide-react"
 
 // Mock data for reports
@@ -248,8 +250,19 @@ function EthicsOfficerContent() {
 
 export default function EthicsOfficerPage() {
   return (
-    <ProtectedRoute allowedRoles={["ethics_officer", "admin"]}>
-      <EthicsOfficerContent />
-    </ProtectedRoute>
+    <ClientOnly
+      fallback={
+        <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 via-white to-purple-50">
+          <div className="text-center">
+            <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4 text-blue-600" />
+            <p className="text-gray-600">Loading Ethics Officer Portal...</p>
+          </div>
+        </div>
+      }
+    >
+      <ProtectedRoute allowedRoles={["ethics_officer", "admin"]}>
+        <EthicsOfficerContent />
+      </ProtectedRoute>
+    </ClientOnly>
   )
 }

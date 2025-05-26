@@ -15,6 +15,7 @@ interface AuthContextType {
   login: (email: string, password: string) => Promise<{ success: boolean; error?: string }>
   logout: () => Promise<void>
   loading: boolean
+  isClient: boolean
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
@@ -22,12 +23,19 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined)
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [loading, setLoading] = useState(true)
+  const [isClient, setIsClient] = useState(false)
 
   useEffect(() => {
+    setIsClient(true)
     checkAuth()
   }, [])
 
   const checkAuth = async () => {
+    if (typeof window === "undefined") {
+      setLoading(false)
+      return
+    }
+
     try {
       console.log("🔍 Checking authentication...")
       const response = await fetch("/api/simple-me")
@@ -50,6 +58,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   const login = async (email: string, password: string): Promise<{ success: boolean; error?: string }> => {
+    if (typeof window === "undefined") {
+      return { success: false, error: "Not available during SSR" }
+    }
+
     try {
       console.log("🔐 Attempting login for:", email)
 
@@ -75,6 +87,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   const logout = async () => {
+    if (typeof window === "undefined") return
+
     try {
       console.log("🚪 Logging out...")
       await fetch("/api/simple-logout", { method: "POST" })
@@ -86,7 +100,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }
 
-  return <AuthContext.Provider value={{ user, login, logout, loading }}>{children}</AuthContext.Provider>
+  return <AuthContext.Provider value={{ user, login, logout, loading, isClient }}>{children}</AuthContext.Provider>
 }
 
 export function useAuth() {

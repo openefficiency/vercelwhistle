@@ -7,6 +7,7 @@ import { useEffect, useState } from "react"
 import { Loader2, Shield, AlertTriangle } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { ClientOnly } from "@/components/client-only"
 import Link from "next/link"
 
 interface ProtectedRouteProps {
@@ -15,13 +16,13 @@ interface ProtectedRouteProps {
   redirectTo?: string
 }
 
-export function ProtectedRoute({ children, allowedRoles, redirectTo = "/login" }: ProtectedRouteProps) {
-  const { user, loading } = useAuth()
+function ProtectedRouteContent({ children, allowedRoles, redirectTo = "/login" }: ProtectedRouteProps) {
+  const { user, loading, isClient } = useAuth()
   const router = useRouter()
   const [showError, setShowError] = useState(false)
 
   useEffect(() => {
-    if (loading) return
+    if (!isClient || loading) return
 
     if (!user) {
       router.push(redirectTo)
@@ -32,9 +33,9 @@ export function ProtectedRoute({ children, allowedRoles, redirectTo = "/login" }
       setShowError(true)
       return
     }
-  }, [user, loading, router, allowedRoles, redirectTo])
+  }, [user, loading, router, allowedRoles, redirectTo, isClient])
 
-  if (loading) {
+  if (!isClient || loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 via-white to-purple-50">
         <div className="text-center">
@@ -82,4 +83,21 @@ export function ProtectedRoute({ children, allowedRoles, redirectTo = "/login" }
   }
 
   return <>{children}</>
+}
+
+export function ProtectedRoute(props: ProtectedRouteProps) {
+  return (
+    <ClientOnly
+      fallback={
+        <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 via-white to-purple-50">
+          <div className="text-center">
+            <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4 text-blue-600" />
+            <p className="text-gray-600">Loading...</p>
+          </div>
+        </div>
+      }
+    >
+      <ProtectedRouteContent {...props} />
+    </ClientOnly>
+  )
 }

@@ -7,7 +7,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge"
 import { Label } from "@/components/ui/label"
 import { ProtectedRoute } from "@/components/protected-route"
-import { Eye, FileText, Clock, MessageSquare, Calendar, LogOut } from "lucide-react"
+import { ClientOnly } from "@/components/client-only"
+import { Eye, FileText, Clock, MessageSquare, Calendar, LogOut, Loader2 } from "lucide-react"
 
 // Mock data for assigned cases
 const mockCases = [
@@ -42,7 +43,6 @@ const mockCases = [
 function InvestigatorContent() {
   const { user, logout } = useAuth()
   const [selectedCase, setSelectedCase] = useState(mockCases[0])
-  const [newNote, setNewNote] = useState("")
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -212,8 +212,19 @@ function InvestigatorContent() {
 
 export default function InvestigatorPage() {
   return (
-    <ProtectedRoute allowedRoles={["investigator", "admin"]}>
-      <InvestigatorContent />
-    </ProtectedRoute>
+    <ClientOnly
+      fallback={
+        <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 via-white to-purple-50">
+          <div className="text-center">
+            <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4 text-blue-600" />
+            <p className="text-gray-600">Loading Investigator Portal...</p>
+          </div>
+        </div>
+      }
+    >
+      <ProtectedRoute allowedRoles={["investigator", "admin"]}>
+        <InvestigatorContent />
+      </ProtectedRoute>
+    </ClientOnly>
   )
 }
