@@ -1,7 +1,6 @@
 "use client"
 
 import type React from "react"
-
 import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -20,6 +19,7 @@ export default function ReportPage() {
   const [contactInfo, setContactInfo] = useState("")
   const [showContactInfo, setShowContactInfo] = useState(false)
   const [prefilledTranscript, setPrefilledTranscript] = useState("")
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
   useEffect(() => {
     // Check for transcript in URL parameters
@@ -31,24 +31,56 @@ export default function ReportPage() {
     }
   }, [])
 
+  const generateTrackingNumber = () => {
+    // Generate a unique tracking number with timestamp
+    const timestamp = Date.now()
+    const random = Math.floor(Math.random() * 10000)
+      .toString()
+      .padStart(4, "0")
+    return `AEG-${timestamp.toString().slice(-8)}${random.slice(-2)}`
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
-    // Generate tracking number
-    const trackingNumber = `AEG-${Date.now().toString().slice(-8)}`
+    if (!reportType || !description.trim()) {
+      alert("Please fill in all required fields.")
+      return
+    }
 
-    // Here you would submit to your backend
-    console.log({
-      reportType,
-      description,
-      isAnonymous,
-      contactInfo: isAnonymous ? null : contactInfo,
-      trackingNumber,
-      timestamp: new Date().toISOString(),
-    })
+    setIsSubmitting(true)
 
-    // Redirect to confirmation page
-    window.location.href = `/report/confirmation?tracking=${trackingNumber}`
+    try {
+      // Generate tracking number
+      const trackingNumber = generateTrackingNumber()
+
+      // Simulate API call (replace with actual backend call)
+      const reportData = {
+        trackingNumber,
+        reportType,
+        description,
+        isAnonymous,
+        contactInfo: isAnonymous ? null : contactInfo,
+        timestamp: new Date().toISOString(),
+        status: "submitted",
+      }
+
+      console.log("Submitting report:", reportData)
+
+      // Simulate network delay
+      await new Promise((resolve) => setTimeout(resolve, 1000))
+
+      // Store in localStorage for demo purposes (replace with actual API)
+      localStorage.setItem(`report_${trackingNumber}`, JSON.stringify(reportData))
+
+      // Redirect to confirmation page with tracking number
+      window.location.href = `/report/confirmation?tracking=${trackingNumber}`
+    } catch (error) {
+      console.error("Error submitting report:", error)
+      alert("There was an error submitting your report. Please try again.")
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
   return (
@@ -175,8 +207,8 @@ export default function ReportPage() {
                 )}
 
                 {/* Submit Button */}
-                <Button type="submit" className="w-full" size="lg">
-                  Submit Report Securely
+                <Button type="submit" className="w-full" size="lg" disabled={isSubmitting}>
+                  {isSubmitting ? "Submitting Report..." : "Submit Report Securely"}
                 </Button>
 
                 {/* Security Notice */}

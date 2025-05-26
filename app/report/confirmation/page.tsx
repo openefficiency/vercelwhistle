@@ -10,30 +10,67 @@ import Link from "next/link"
 export default function ConfirmationPage() {
   const [trackingNumber, setTrackingNumber] = useState("")
   const [copied, setCopied] = useState(false)
+  const [reportData, setReportData] = useState<any>(null)
+  const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     // Get tracking number from URL
     const urlParams = new URLSearchParams(window.location.search)
     const tracking = urlParams.get("tracking")
+
     if (tracking) {
       setTrackingNumber(tracking)
+
+      // Try to get report data from localStorage (replace with API call)
+      try {
+        const storedData = localStorage.getItem(`report_${tracking}`)
+        if (storedData) {
+          setReportData(JSON.parse(storedData))
+        }
+      } catch (error) {
+        console.error("Error loading report data:", error)
+      }
+    } else {
+      // If no tracking number, generate a fallback one
+      const fallbackTracking = `AEG-${Date.now().toString().slice(-8)}`
+      setTrackingNumber(fallbackTracking)
     }
+
+    setLoading(false)
   }, [])
 
-  const copyTrackingNumber = () => {
-    navigator.clipboard.writeText(trackingNumber)
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
+  const copyTrackingNumber = async () => {
+    try {
+      await navigator.clipboard.writeText(trackingNumber)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    } catch (error) {
+      // Fallback for older browsers
+      const textArea = document.createElement("textarea")
+      textArea.value = trackingNumber
+      document.body.appendChild(textArea)
+      textArea.select()
+      document.execCommand("copy")
+      document.body.removeChild(textArea)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    }
   }
 
   const downloadReceipt = () => {
+    const submissionTime = reportData?.timestamp
+      ? new Date(reportData.timestamp).toLocaleString()
+      : new Date().toLocaleString()
+
     const receipt = `
 AEGIS WHISTLEBLOWER PLATFORM
 Report Submission Confirmation
 
 Tracking Number: ${trackingNumber}
-Submitted: ${new Date().toLocaleString()}
+Submitted: ${submissionTime}
 Status: Received and Under Review
+Type: ${reportData?.reportType || "Not specified"}
+Anonymous: ${reportData?.isAnonymous ? "Yes" : "No"}
 
 Your report has been securely submitted and will be reviewed by our ethics team.
 You can track the progress of your report using the tracking number above.
@@ -41,6 +78,9 @@ You can track the progress of your report using the tracking number above.
 For questions or updates, visit: ${window.location.origin}/whistleblower
 
 This is an automated confirmation. Please keep this tracking number for your records.
+
+Report ID: ${trackingNumber}
+Generated: ${new Date().toLocaleString()}
     `
 
     const blob = new Blob([receipt], { type: "text/plain" })
@@ -52,6 +92,17 @@ This is an automated confirmation. Please keep this tracking number for your rec
     a.click()
     document.body.removeChild(a)
     URL.revokeObjectURL(url)
+  }
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-green-50 via-white to-blue-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading confirmation...</p>
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -99,14 +150,12 @@ This is an automated confirmation. Please keep this tracking number for your rec
                 <label className="block text-sm font-medium text-gray-600 mb-2">Tracking Number</label>
                 <div className="flex items-center justify-center space-x-3">
                   <Badge variant="outline" className="text-lg px-4 py-2 font-mono">
-                    {trackingNumber || "Loading..."}
+                    {trackingNumber}
                   </Badge>
-                  {trackingNumber && (
-                    <Button variant="outline" size="sm" onClick={copyTrackingNumber}>
-                      <Copy className="h-4 w-4 mr-1" />
-                      {copied ? "Copied!" : "Copy"}
-                    </Button>
-                  )}
+                  <Button variant="outline" size="sm" onClick={copyTrackingNumber}>
+                    <Copy className="h-4 w-4 mr-1" />
+                    {copied ? "Copied!" : "Copy"}
+                  </Button>
                 </div>
               </div>
 
@@ -122,8 +171,20 @@ This is an automated confirmation. Please keep this tracking number for your rec
               {/* Submission Time */}
               <div className="text-center">
                 <label className="block text-sm font-medium text-gray-600 mb-2">Submitted</label>
-                <p className="text-gray-900">{new Date().toLocaleString()}</p>
+                <p className="text-gray-900">
+                  {reportData?.timestamp
+                    ? new Date(reportData.timestamp).toLocaleString()
+                    : new Date().toLocaleString()}
+                </p>
               </div>
+
+              {/* Report Type */}
+              {reportData?.reportType && (
+                <div className="text-center">
+                  <label className="block text-sm font-medium text-gray-600 mb-2">Report Type</label>
+                  <p className="text-gray-900 capitalize">{reportData.reportType.replace(/([A-Z])/g, " $1")}</p>
+                </div>
+              )}
             </CardContent>
           </Card>
 

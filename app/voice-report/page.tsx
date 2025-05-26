@@ -1,13 +1,13 @@
 "use client"
 
-import { useState, useRef } from "react"
+import { useState, useRef, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { Shield, ArrowLeft, Save, Edit3, Phone, PhoneOff, AlertCircle, Loader2 } from "lucide-react"
+import { Shield, ArrowLeft, Save, Edit3, Phone, PhoneOff, AlertCircle, Loader2, ExternalLink } from "lucide-react"
 import Link from "next/link"
 
 const VAPI_PUBLIC_KEY = "4669de51-f9ba-4e99-a9dd-e39279a6f510"
@@ -27,73 +27,104 @@ export default function VoiceReportPage() {
   const [isConnecting, setIsConnecting] = useState(false)
   const [error, setError] = useState("")
   const [vapiReady, setVapiReady] = useState(false)
+  const [webCallUrl, setWebCallUrl] = useState("")
 
   const transcriptRef = useRef<HTMLDivElement>(null)
   const vapiRef = useRef<any>(null)
 
-  // Simple VAPI loader
-  const loadVapi = async () => {
-    try {
-      if (!window.Vapi) {
+  // Load VAPI SDK
+  useEffect(() => {
+    const loadVapi = async () => {
+      try {
+        if (window.Vapi) {
+          setVapiReady(true)
+          return
+        }
+
+        console.log("Loading VAPI SDK...")
+
+        // Load VAPI SDK from CDN
         const script = document.createElement("script")
         script.src = "https://cdn.jsdelivr.net/npm/@vapi-ai/web@latest/dist/index.js"
         script.crossOrigin = "anonymous"
 
         await new Promise((resolve, reject) => {
-          script.onload = resolve
+          script.onload = () => {
+            console.log("VAPI SDK loaded")
+            // Wait a bit for the SDK to initialize
+            setTimeout(() => {
+              if (window.Vapi) {
+                setVapiReady(true)
+                resolve(true)
+              } else {
+                reject(new Error("VAPI not available"))
+              }
+            }, 1000)
+          }
           script.onerror = reject
           document.head.appendChild(script)
         })
+      } catch (error) {
+        console.error("Failed to load VAPI SDK:", error)
+        setError("Failed to load voice assistant. You can try the web call option below.")
+      }
+    }
 
-        // Wait for VAPI to be available
-        let attempts = 0
-        while (!window.Vapi && attempts < 30) {
-          await new Promise((resolve) => setTimeout(resolve, 100))
-          attempts++
+    loadVapi()
+  }, [])
+
+  // Initialize VAPI client
+  useEffect(() => {
+    if (!vapiReady || !window.Vapi) return
+
+    try {
+      const vapi = new window.Vapi(VAPI_PUBLIC_KEY)
+
+      vapi.on("call-start", () => {
+        console.log("Call started")
+        setIsConnected(true)
+        setIsConnecting(false)
+        setConversationStarted(true)
+        setError("")
+      })
+
+      vapi.on("call-end", () => {
+        console.log("Call ended")
+        setIsConnected(false)
+        setIsConnecting(false)
+      })
+
+      vapi.on("message", (message: any) => {
+        console.log("VAPI message:", message)
+        if (message.type === "transcript" && message.transcript) {
+          setTranscript((prev) => {
+            const newTranscript = prev + (prev ? " " : "") + message.transcript
+            setTimeout(() => {
+              if (transcriptRef.current) {
+                transcriptRef.current.scrollTop = transcriptRef.current.scrollHeight
+              }
+            }, 100)
+            return newTranscript
+          })
         }
-      }
+      })
 
-      if (window.Vapi) {
-        const vapi = new window.Vapi(VAPI_PUBLIC_KEY)
+      vapi.on("error", (error: any) => {
+        console.error("VAPI error:", error)
+        setError(`Call failed: ${error.message || "Unknown error"}`)
+        setIsConnected(false)
+        setIsConnecting(false)
+      })
 
-        vapi.on("call-start", () => {
-          setIsConnected(true)
-          setIsConnecting(false)
-          setConversationStarted(true)
-          setError("")
-        })
-
-        vapi.on("call-end", () => {
-          setIsConnected(false)
-          setIsConnecting(false)
-        })
-
-        vapi.on("message", (message: any) => {
-          if (message.type === "transcript" && message.transcript) {
-            setTranscript((prev) => prev + (prev ? " " : "") + message.transcript)
-          }
-        })
-
-        vapi.on("error", (error: any) => {
-          setError(`Call failed: ${error.message || "Unknown error"}`)
-          setIsConnected(false)
-          setIsConnecting(false)
-        })
-
-        vapiRef.current = vapi
-        setVapiReady(true)
-      }
+      vapiRef.current = vapi
+      console.log("VAPI client ready")
     } catch (error) {
-      setError("Failed to load voice assistant")
-      console.error("VAPI error:", error)
+      console.error("Failed to initialize VAPI:", error)
+      setError("Failed to initialize voice assistant")
     }
-  }
+  }, [vapiReady])
 
-  const startCall = async () => {
-    if (!vapiRef.current) {
-      await loadVapi()
-    }
-
+  const startDirectCall = async () => {
     if (!vapiRef.current) {
       setError("Voice assistant not ready")
       return
@@ -108,7 +139,41 @@ export default function VoiceReportPage() {
         assistantId: VAPI_AGENT_ID,
       })
     } catch (error: any) {
+      console.error("Failed to start call:", error)
       setError(`Failed to start call: ${error.message || "Unknown error"}`)
+      setIsConnecting(false)
+    }
+  }
+
+  const createWebCall = async () => {
+    try {
+      setIsConnecting(true)
+      setError("")
+
+      const response = await fetch("/api/vapi-call", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          assistantId: VAPI_AGENT_ID,
+        }),
+      })
+
+      const data = await response.json()
+
+      if (data.success && data.webCallUrl) {
+        setWebCallUrl(data.webCallUrl)
+        // Open in new tab
+        window.open(data.webCallUrl, "_blank")
+        setConversationStarted(true)
+      } else {
+        throw new Error(data.error || "Failed to create web call")
+      }
+    } catch (error: any) {
+      console.error("Failed to create web call:", error)
+      setError(`Failed to create web call: ${error.message}`)
+    } finally {
       setIsConnecting(false)
     }
   }
@@ -166,8 +231,11 @@ export default function VoiceReportPage() {
               <CardTitle className="flex items-center justify-center space-x-2">
                 <Phone className="h-6 w-6 text-blue-600" />
                 <span>AI Voice Assistant</span>
+                {!vapiReady && <Loader2 className="h-4 w-4 animate-spin" />}
               </CardTitle>
-              <CardDescription>Click to start speaking with our AI assistant</CardDescription>
+              <CardDescription>
+                {vapiReady ? "Choose your preferred way to start the voice call" : "Loading voice assistant..."}
+              </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
               <div className="text-center">
@@ -181,7 +249,9 @@ export default function VoiceReportPage() {
                       ? "🟡 Connecting..."
                       : error
                         ? "❌ Error"
-                        : "⚪ Ready"}
+                        : vapiReady
+                          ? "⚪ Ready"
+                          : "⏳ Loading..."}
                 </Badge>
               </div>
 
@@ -192,44 +262,93 @@ export default function VoiceReportPage() {
                 </Alert>
               )}
 
-              <div className="flex justify-center space-x-4">
-                {!isConnected ? (
-                  <Button onClick={startCall} disabled={isConnecting} size="lg" className="px-8 py-4 text-lg">
-                    {isConnecting ? (
-                      <>
-                        <Loader2 className="h-5 w-5 mr-2 animate-spin" />
-                        Connecting...
-                      </>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* Direct Call Option */}
+                <div className="space-y-3">
+                  <h3 className="font-semibold text-center">Direct Call (Recommended)</h3>
+                  <div className="flex justify-center">
+                    {!isConnected ? (
+                      <Button
+                        onClick={startDirectCall}
+                        disabled={isConnecting || !vapiReady}
+                        size="lg"
+                        className="w-full"
+                      >
+                        {isConnecting ? (
+                          <>
+                            <Loader2 className="h-5 w-5 mr-2 animate-spin" />
+                            Connecting...
+                          </>
+                        ) : (
+                          <>
+                            <Phone className="h-5 w-5 mr-2" />
+                            Start Direct Call
+                          </>
+                        )}
+                      </Button>
                     ) : (
-                      <>
-                        <Phone className="h-5 w-5 mr-2" />
-                        Start Voice Call
-                      </>
+                      <Button onClick={endCall} variant="destructive" size="lg" className="w-full">
+                        <PhoneOff className="h-5 w-5 mr-2" />
+                        End Call
+                      </Button>
                     )}
-                  </Button>
-                ) : (
-                  <Button onClick={endCall} variant="destructive" size="lg">
-                    <PhoneOff className="h-5 w-5 mr-2" />
-                    End Call
-                  </Button>
-                )}
+                  </div>
+                  <p className="text-xs text-gray-600 text-center">Call directly in this browser window</p>
+                </div>
+
+                {/* Web Call Option */}
+                <div className="space-y-3">
+                  <h3 className="font-semibold text-center">Web Call (Alternative)</h3>
+                  <div className="flex justify-center">
+                    <Button
+                      onClick={createWebCall}
+                      disabled={isConnecting}
+                      variant="outline"
+                      size="lg"
+                      className="w-full"
+                    >
+                      {isConnecting ? (
+                        <>
+                          <Loader2 className="h-5 w-5 mr-2 animate-spin" />
+                          Creating...
+                        </>
+                      ) : (
+                        <>
+                          <ExternalLink className="h-5 w-5 mr-2" />
+                          Open Web Call
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                  <p className="text-xs text-gray-600 text-center">Opens in a new tab if direct call fails</p>
+                </div>
               </div>
 
               <div className="bg-blue-50 p-4 rounded-lg">
                 <h3 className="font-semibold text-blue-900 mb-2">How to use:</h3>
                 <ul className="text-sm text-blue-800 space-y-1">
-                  <li>• Click "Start Voice Call" to begin</li>
+                  <li>• Try "Direct Call" first for the best experience</li>
+                  <li>• Use "Web Call" if direct call doesn't work</li>
                   <li>• Speak clearly about your concern</li>
                   <li>• The AI will guide you through questions</li>
                   <li>• Everything is transcribed automatically</li>
                   <li>• Your conversation is secure and encrypted</li>
                 </ul>
               </div>
+
+              {webCallUrl && (
+                <div className="bg-green-50 p-4 rounded-lg">
+                  <p className="text-green-800 text-sm">
+                    ✅ Web call created! The call should open in a new tab. After your conversation, you can manually
+                    enter the transcript below.
+                  </p>
+                </div>
+              )}
             </CardContent>
           </Card>
 
           {/* Transcript Section */}
-          {conversationStarted && (
+          {(conversationStarted || transcript) && (
             <Card className="border-0 shadow-xl">
               <CardHeader>
                 <div className="flex items-center justify-between">
@@ -237,26 +356,40 @@ export default function VoiceReportPage() {
                     <Edit3 className="h-5 w-5 text-green-600" />
                     <span>Conversation Transcript</span>
                   </CardTitle>
-                  <Badge variant="outline">Live Recording</Badge>
+                  <Badge variant="outline">{isConnected ? "🔴 Live Recording" : "📝 Manual Entry"}</Badge>
                 </div>
-                <CardDescription>Real-time transcript of your conversation with the AI assistant</CardDescription>
+                <CardDescription>
+                  {isConnected
+                    ? "Real-time transcript of your conversation"
+                    : "Enter or edit your conversation transcript"}
+                </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="space-y-2">
-                  <Label htmlFor="transcript">Live Transcript</Label>
-                  <div
-                    ref={transcriptRef}
-                    className="min-h-[200px] max-h-[400px] p-4 border rounded-lg bg-white overflow-y-auto"
-                  >
-                    {transcript ? (
-                      <span className="text-gray-900 whitespace-pre-wrap">{transcript}</span>
-                    ) : (
-                      <span className="text-gray-400">Your conversation will appear here as you speak...</span>
-                    )}
-                  </div>
+                  <Label htmlFor="transcript">Transcript</Label>
+                  {isConnected ? (
+                    <div
+                      ref={transcriptRef}
+                      className="min-h-[200px] max-h-[400px] p-4 border rounded-lg bg-white overflow-y-auto"
+                    >
+                      {transcript ? (
+                        <span className="text-gray-900 whitespace-pre-wrap">{transcript}</span>
+                      ) : (
+                        <span className="text-gray-400">Your conversation will appear here as you speak...</span>
+                      )}
+                    </div>
+                  ) : (
+                    <Textarea
+                      id="transcript"
+                      value={transcript}
+                      onChange={(e) => setTranscript(e.target.value)}
+                      className="min-h-[200px]"
+                      placeholder="Enter your conversation transcript here, or paste it from the web call..."
+                    />
+                  )}
                 </div>
 
-                {transcript && (
+                {transcript && !isConnected && (
                   <div className="space-y-2">
                     <div className="flex items-center justify-between">
                       <Label htmlFor="edit-transcript">Edit Transcript</Label>
