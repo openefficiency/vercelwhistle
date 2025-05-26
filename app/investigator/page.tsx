@@ -1,13 +1,15 @@
 "use client"
 
 import { useState } from "react"
+import { useSession, signOut } from "next-auth/react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Eye, FileText, Clock, MessageSquare, Upload, Calendar } from "lucide-react"
+import { ProtectedRoute } from "@/components/protected-route"
+import { Eye, FileText, Clock, MessageSquare, Upload, Calendar, LogOut } from "lucide-react"
 
 // Mock data for assigned cases
 const mockCases = [
@@ -39,7 +41,8 @@ const mockCases = [
   },
 ]
 
-export default function InvestigatorPage() {
+function InvestigatorContent() {
+  const { data: session } = useSession()
   const [selectedCase, setSelectedCase] = useState(mockCases[0])
   const [newNote, setNewNote] = useState("")
 
@@ -86,10 +89,11 @@ export default function InvestigatorPage() {
             </div>
             <div className="flex items-center space-x-4">
               <Badge variant="outline" className="text-purple-600 border-purple-600">
-                Investigator: John Smith
+                {session?.user?.name} - {session?.user?.department}
               </Badge>
-              <Button variant="outline" size="sm">
-                Profile
+              <Button variant="outline" size="sm" onClick={() => signOut()}>
+                <LogOut className="h-4 w-4 mr-2" />
+                Sign Out
               </Button>
             </div>
           </div>
@@ -313,5 +317,13 @@ export default function InvestigatorPage() {
         </div>
       </div>
     </div>
+  )
+}
+
+export default function InvestigatorPage() {
+  return (
+    <ProtectedRoute allowedRoles={["investigator", "admin"]}>
+      <InvestigatorContent />
+    </ProtectedRoute>
   )
 }

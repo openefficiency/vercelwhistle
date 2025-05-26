@@ -1,11 +1,13 @@
 "use client"
 
 import { useState } from "react"
+import { useSession, signOut } from "next-auth/react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { ProtectedRoute } from "@/components/protected-route"
 import {
   Shield,
   Search,
@@ -17,6 +19,7 @@ import {
   MessageSquare,
   TrendingUp,
   Users,
+  LogOut,
 } from "lucide-react"
 
 // Mock data for reports
@@ -53,7 +56,8 @@ const mockReports = [
   },
 ]
 
-export default function EthicsOfficerPage() {
+function EthicsOfficerContent() {
+  const { data: session } = useSession()
   const [searchTerm, setSearchTerm] = useState("")
   const [selectedStatus, setSelectedStatus] = useState("all")
 
@@ -110,10 +114,11 @@ export default function EthicsOfficerPage() {
             </div>
             <div className="flex items-center space-x-4">
               <Badge variant="outline" className="text-green-600 border-green-600">
-                Officer: Jane Doe
+                {session?.user?.name} - {session?.user?.department}
               </Badge>
-              <Button variant="outline" size="sm">
-                Settings
+              <Button variant="outline" size="sm" onClick={() => signOut()}>
+                <LogOut className="h-4 w-4 mr-2" />
+                Sign Out
               </Button>
             </div>
           </div>
@@ -330,5 +335,13 @@ export default function EthicsOfficerPage() {
         </Tabs>
       </div>
     </div>
+  )
+}
+
+export default function EthicsOfficerPage() {
+  return (
+    <ProtectedRoute allowedRoles={["ethics_officer", "admin"]}>
+      <EthicsOfficerContent />
+    </ProtectedRoute>
   )
 }
